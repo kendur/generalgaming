@@ -1,0 +1,4 @@
+# Local secrets and environment files. Never commit these.
+ha/.env
+**/secrets.yaml
+**/*.token
