@@ -1,0 +1,41 @@
+# SonosDeck: Home Assistant on QNAP Container Station.
+# PLAN §3, Option 2. Use this when the NAS can't run a Home Assistant OS VM.
+#
+# How to use:
+#   1. Copy this file and .env.example to ${STACK_ROOT} on the QNAP.
+#   2. Rename .env.example to .env and fill it in.
+#   3. In Container Station, choose Applications > Create, or run `docker compose up -d` in ${STACK_ROOT}.
+#
+# Music Assistant is optional (PLAN §2.3, route 6). To start it as well:
+#   docker compose --profile music-assistant up -d
+name: sonosdeck
+
+services:
+  homeassistant:
+    container_name: homeassistant
+    image: ghcr.io/home-assistant/home-assistant:${HA_TAG:-stable}
+    # Host networking is required for Sonos SSDP discovery and UPnP event callbacks (TCP 1400 and up).
+    network_mode: host
+    # privileged is only needed for USB or Bluetooth dongles, not for Sonos. Least privilege by default.
+    # privileged: true
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment:
+      TZ: ${TZ:?set TZ in .env}
+    volumes:
+      - ${STACK_ROOT:?set STACK_ROOT in .env}/homeassistant:/config
+      - /etc/localtime:/etc/localtime:ro
+      # Bluetooth only. QTS may not have /run/dbus.
+      # - /run/dbus:/run/dbus:ro
+
+  music-assistant:
+    profiles: ["music-assistant"]
+    container_name: music-assistant
+    image: ghcr.io/music-assistant/server:${MA_TAG:-latest}
+    # Host networking is required for player discovery and streaming (web UI on TCP 8095, audio stream on TCP 8097).
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: info
+    volumes:
+      - ${STACK_ROOT:?set STACK_ROOT in .env}/music-assistant:/data

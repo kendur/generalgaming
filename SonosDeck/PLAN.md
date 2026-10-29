@@ -1,187 +1,197 @@
-# SonosDeck — Plan (v1, awaiting approval)
+# SonosDeck — Plan (v2)
 
-**Status:** Proposed. No application code will be written until this plan is accepted.
+**Status:** Accepted 2026-10-29. Path A (Home Assistant) is delivered first, then Path B (standalone app).
 **Date:** 2026-10-29
-**Working name:** SonosDeck. A public release must use a distinct name; see §8.
+**Setup file:** [PROJECT.md](PROJECT.md)
+**Working name:** SonosDeck. A public release must use a distinct name (§8).
 
 ---
 
 ## 1. Goal and constraints
 
 **Goal**
-- Control a Sonos system from a Steam Deck, in both Desktop Mode and Game Mode.
+- Control a Sonos system from a Steam Deck in **Desktop Mode**, docked to two large monitors with keyboard and mouse.
 - Add Windows later.
-- Reach as close to feature parity with the official Sonos app as third-party access allows.
+- Get as close to the official Sonos app's features as third parties can.
 
 **Constraints**
 - Lightweight, with simple graphics.
-- Runs without root changes to SteamOS.
-- Survives SteamOS updates.
-- Usable with touch, trackpad and gamepad.
+- No root changes to SteamOS, and everything survives SteamOS updates.
+- Game Mode, gamepad navigation and Decky plugins are **out of scope**.
 
-**Assumptions to confirm (§10)**
-- The system is S2 rather than S1.
-- The Deck and the speakers share one subnet or VLAN.
-- UPnP is enabled in Sonos Connection Security, which is the default.
+**Environment** (details in PROJECT.md)
+- QNAP NAS.
+- One LAN.
+- Spotify about 99% of listening, YouTube Music about 1%.
 
 ---
 
 ## 2. Research summary
 
-Full source list in §11.
+Full source list is in §11.
 
 ### 2.1 Which Sonos interfaces a third party can use
 
 | Interface | Status | Coverage | Verdict |
 |---|---|---|---|
-| **Local UPnP/SOAP, TCP 1400** | Sonos calls it "unsupported" and "no longer actively maintained" (S5, S6). Since firmware 85.0 (July 2025) a user can switch UPnP off. It is on by default, and turning it off makes every SOAP or event call return HTTP 403 (S5, S7). | The only interface near parity: queue, library, alarms, EQ, home theater, playlists, favorites, rename, battery (S8). | **Foundation for both paths.** Detect 403 and explain the fix to the user. |
-| **Local WebSocket, TCP 1443** | Documented in passing, but "The Control API on the LAN is not available for wide release" (S3). Home Assistant and Music Assistant use it anyway (S9, S10). | Groups, playback, volume, audioClip (announcements) and home theater. No queue, browse, alarms or EQ (S10). | Supplement only, for announcements. |
-| **Cloud Control API** | Official. OAuth2 with a public HTTPS redirect, and events delivered by HTTPS webhook (S1, S2). | No queue view or edit, no browse or search, no EQ, no alarms, no sleep timer (S1). | **Not used.** It needs a server and covers less than the local interfaces. |
-| **SMAPI (music services)** | Built for Sonos players and apps; there is no sanctioned third-party browse or search (S4). | The community route depends on decrypting tokens stored on the players. SoCo PR #1010 does this, and the maintainer blocked it on 2026-10-13 over legal and security risk (S11, S12). | **Not used.** See §2.3. |
+| **Local UPnP/SOAP, TCP 1400** | Sonos calls it "unsupported" and "no longer actively maintained" (S5, S6). Since firmware 85.0 (July 2025) a user can switch UPnP off. It is on by default; turning it off makes every SOAP and event call return HTTP 403 (S5, S7). | The only interface close to the official app: queue, library, alarms, EQ, home theater, playlists, favorites, rename, battery (S8). | **The foundation for both paths.** Detect 403 and explain the fix. |
+| **Local WebSocket, TCP 1443** | Documented in passing, but "The Control API on the LAN is not available for wide release" (S3). Home Assistant and Music Assistant use it anyway (S9, S10). | Groups, playback, volume, audioClip (announcements), home theater. No queue, browse, alarms or EQ (S10). | Supplement only, for announcements. |
+| **Cloud Control API** | Official. OAuth2 with a public HTTPS redirect URL, and events delivered by HTTPS webhook (S1, S2). | No queue, browse or search, EQ, alarms or sleep timer (S1). | **Not used.** |
+| **SMAPI (music services)** | Built for Sonos players and Sonos's own apps; there is no sanctioned way for a third party to browse or search (S4). | The community workaround decrypts tokens stored on the speakers. SoCo PR #1010 implements it; the maintainer blocked it on 2026-10-13 over legal and security risk (S11, S12). | **Not used.** |
 
 ### 2.2 Official app inventory, 2024–2026
 
-The 2024 redesign removed many features. Most came back during 2024–2026, including queue editing, playlist editing, alarms with snooze, the sleep timer and the music library, and save-queue-as-playlist arrived 2026-01-27 (S13, S14). The full inventory is in the matrix in §5.
+The 2024 redesign removed many features, and most came back during 2024–2026 (S13, S14):
+- queue editing
+- playlist editing
+- alarms with snooze
+- sleep timer
+- music library
+- save queue as playlist (2026-01-27)
 
-### 2.3 Music services: a hard limit for any third-party controller
+The full inventory is the matrix in §5.
 
-Native browsing and search of the services linked in your Sonos account is not reliably available to third-party apps (S11, S12, S15). These routes are available:
+### 2.3 Spotify and YouTube Music
 
-1. **Sonos Favorites and Sonos Playlists.** Anything you favorite in the official app becomes playable here. Fully reliable.
-2. **Share links.** Paste a Spotify, Apple Music, TIDAL or Deezer link. SoCo's ShareLink plugin queues it through the account already linked on the speaker (S16).
-3. **Music Assistant (Path A only).** Search and stream through Music Assistant's own provider accounts. These are separate from the Sonos-linked accounts: "Sonos is not a music provider" (S17).
-4. **Spotify Web API search (optional, either path).** Uses your own Spotify client ID, and plays the results through route 2.
+**Constraints found:**
+- **No sanctioned way to browse the music services linked in your Sonos account** from third-party code (§2.1, SMAPI).
+- **Spotify Developer Mode was tightened in February and March 2026** (S29):
+  - Premium is required.
+  - One developer client ID per person.
+  - At most 5 users per client ID.
+  - Fewer API endpoints. Reportedly the browse endpoints were removed and search returns at most 10 results.
+- **Music Assistant's Spotify provider** has two playback engines (S17):
+  - **librespot (the default community engine):** "Accounts created around December 2024 and later generally cannot play through librespot."
+  - **Spotify Soloist:** the documented alternative. It "works with every Premium account", but "using it through Music Assistant is at your own risk."
+  - Premium is required either way.
+- **Home Assistant's Sonos integration plays Spotify natively.** When you pick Spotify media through a Sonos player in HA's media browser, HA converts it to a Spotify URI. The speaker then plays it through the Spotify account linked in the Sonos app; HA does not use Spotify Connect for this. Source: HA `sonos/media_browser.py` and `media_player.py` (S30).
+
+**Music strategy, layered from most to least robust:**
+
+| # | Route | Path A | Path B | Notes |
+|---|---|---|---|---|
+| 1 | **Sonos Favorites and Sonos Playlists** | Y | Y | Anything you favorite in the official app becomes one click here. Works for YouTube Music too. |
+| 2 | **Spotify share links and URIs**, played natively on Sonos | Y (`play_media`) | Y (SoCo ShareLink) | Paste or drag a link from the Spotify app. |
+| 3 | **Spotify desktop app** on the Deck (Flatpak), casting to Sonos through Spotify Connect | Complements HA | Complements the app | The best search and browse experience available to you. HA and the app then handle rooms, volume, EQ and grouping. Connect playback uses Spotify's queue, not the Sonos queue. |
+| 4 | **HA Spotify integration** for browsing inside the dashboard, played natively through route 2 | Test in A2 | — | Needs your own Spotify developer app and Premium. Library and playlists should work; browse features may be gone (S29, S31). |
+| 5 | **SpotifyPlus** (HACS) | Fallback in A2 | — | Richer Spotify API coverage. Sonos support uses SoCo and builds a local queue on the speaker, with known quirks (S32). |
+| 6 | **Music Assistant** with the Spotify provider | Optional; test in A2 | — | Needed for the Sonos Card's Search section. Newer accounts need the Soloist engine (at your own risk, S17). |
 
 ### 2.4 Prior art
 
 | Project | State | Takeaway |
 |---|---|---|
 | noson (Qt, Linux) | Flathub: "This application is no longer available on Flathub… does no longer work as flatpak package" (S18) | The best Linux controller is effectively gone from SteamOS. |
-| Sonos web app (play.sonos.com) | Basic: grouping, playback, queue view, no settings (S19) | Usable today as a stopgap in a Deck browser. |
-| Decky plugin store | 116 plugins, none for Sonos. "Music Control" handles local MPRIS players only (S20) | The gap is real. |
-| HA Deck (Decky) | 2026-03; lights, switches and sensors through Home Assistant; manual install (S21) | Shows that a Home Assistant client in the Quick Access Menu works. No media player support. |
-| Home Assistant Sonos integration | Core integration built on SoCo 0.31.5 and sonos-websocket. Handles event fallback, resubscription and favorites playback (S9, S22) | Already solves most of the hard engineering. |
-| Sonos Card (HACS) | Player, groups, grouping, per-room volume, favorites, queue (show, play, rearrange), search (through Music Assistant), sleep timer (S23) | Covers most of the official app's main screens. |
+| Sonos web app (play.sonos.com) | Basic: grouping, playback, queue view, no settings (S19) | A stopgap until Path A is running. |
+| Home Assistant Sonos integration | Core integration built on SoCo 0.31.5 and sonos-websocket 0.2.0. Handles fallback when events stop arriving, resubscription and favorites playback (S9, S22) | Already solves most of the hard engineering. |
+| Sonos Card (HACS) | Auto-discovers Sonos players. Sections: player, groups, grouping, volumes, media browser, queue (show, play, rearrange), search (needs Music Assistant), sleep timer. Can be split into several card instances (S23) | Covers the official app's main screens. |
 
 ### 2.5 Distribution policy constraints (verified)
 
-- **Decky store:** the submission template requires the checkbox "Generative AI was NOT used to write a majority of the code I am submitting" (S24). Any Decky plugin built in this project is **self-distributed**, installed from a zip or URL with Decky's developer mode.
-- **Flathub:**
+- **Flathub** (S25):
   - "Flathub manifests must not contain AI-generated or AI-assisted content."
   - "AI tools or agents must not open or automate Flathub submission pull requests."
-  - "Official affiliation must not be implied by using a vendor's name in the application name or icon." (S25)
-  - Consequence: any Flatpak is **self-hosted**, as a `.flatpak` bundle on GitHub Releases.
+  - "Official affiliation must not be implied by using a vendor's name in the application name or icon."
+  - So the Path B Flatpak will be **self-hosted** as a `.flatpak` bundle on GitHub Releases.
+- **Decky store** (S24) requires the checkbox "Generative AI was NOT used to write a majority of the code". This no longer matters, since Decky plugins only work in Game Mode, which is out of scope.
 
 ---
 
-## 3. Architecture decision
+## 3. Architecture
 
-### Path A — Home Assistant first (**recommended**)
-
-```
- Steam Deck (Game/Desktop)        Windows PC           Phone
- ┌──────────────────────┐   ┌─────────────────┐   ┌──────────┐
- │ Browser app-window   │   │ Edge --app=URL  │   │ HA app / │
- │ (kiosk dashboard)    │   └────────┬────────┘   │ browser  │
- │ + Decky QAM plugin   │            │            └────┬─────┘
- └─────────┬────────────┘            │                 │
-           └──────────── HTTP/WebSocket ───────────────┘
-                              │
-                  ┌───────────▼─────────────┐
-                  │ Home Assistant (NAS)    │
-                  │  • Sonos integration    │──UPnP 1400 / WS 1443──► Sonos
-                  │  • Music Assistant      │
-                  │  • HACS: Sonos Card,    │
-                  │    kiosk-mode           │
-                  │  • sonos_extras (ours)  │
-                  └─────────────────────────┘
-```
-
-**Why it is recommended**
-- **The protocol work is already done and maintained upstream.** That includes event fallback to polling, resubscription, and the alarm-write spacing (S22).
-- **One server serves every client.** "Windows later" becomes a browser shortcut instead of a port.
-- **Music Assistant is the cleanest available music-service search** (§2.3).
-- **Moving off the NAS later is cheap.** Since HA 2025.1, restoring a backup works on every install type (S26).
-- **It gains features the official app also has.** Remote control away from home and automations come with HA.
-
-**Costs**
-- **NAS dependency.** If HA is down, so is this controller. The official app remains the fallback.
-- **HACS cards break on HA updates.** It has happened in 2026 to the Sonos Card, browser_mod and kiosk-mode (S23, S27).
-  - Mitigation: pin versions, keep the dashboard YAML in this repo, and update deliberately.
-- **Weaker gamepad navigation in a browser.** Touch and the trackpads compensate in Game Mode.
-- **Gaps in HA itself** (§5) need a small custom integration, `sonos_extras`. It reuses the SoCo library HA already ships.
-
-### Path B — Standalone app (fallback)
+### Path A — Home Assistant on the QNAP (phase 1)
 
 ```
- ┌──────────────── SonosDeck (Python 3.12, Flatpak) ───────────────┐
- │ ui/      pygame-ce (SDL2): focus-grid widgets, gamepad, OSK     │
- │ core/    SoCo 0.32 wrapped in a worker pool; state store        │
- │          discovery chain • topology • event mgr + watchdog      │
- │          resume handler • UPnP-off (403) detector               │
- │ extras/  sonos-websocket (audioClip announcements, optional)    │
- └──────────────────────────────────────────────────────────────────┘
- Optional: Decky QAM plugin reusing core/ (self-distributed)
+ Steam Deck — Desktop Mode (KDE)                    Windows PC (later)
+ ┌──────────────────────────────────────┐          ┌────────────────────┐
+ │ Monitor 1/2: "SonosDeck" app window  │          │ Edge --app window  │
+ │   (Chromium --app, kiosk dashboard)  │          └─────────┬──────────┘
+ │ Pop-out: "SonosDeck Mini" window     │                    │
+ │ Spotify desktop app (Connect)        │                    │
+ └──────────────────┬───────────────────┘                    │
+                    └──────────── HTTP / WebSocket ──────────┘
+                                   │
+               ┌───────────────────▼────────────────────┐
+               │ QNAP: Home Assistant                   │
+               │  (HAOS VM in Virtualization Station,   │
+               │   or Container Station, host network)  │
+               │  • Sonos integration (core)            │──UPnP 1400 / WS 1443──► Sonos
+               │  • Spotify integration (test in A2)    │
+               │  • HACS: Sonos Card, kiosk-mode,       │
+               │    auto-entities                       │
+               │  • sonos_extras (ours, if needed)      │
+               └────────────────────────────────────────┘
 ```
 
-**Stack rationale**
-- **SoCo 0.32.0** (2026-10-15) has the broadest feature coverage, is actively maintained, and is what HA uses (S16).
-  - New in 0.32: favorites writes and queue reordering.
-  - Its API is synchronous, so the app wraps it in a worker pool.
-- **pygame-ce** for the UI:
-  - A wheel of about 12 MB.
-  - SDL2 game-controller support.
-  - SDL2 opens Steam's on-screen keyboard automatically when it sees `SteamDeck=1` (S28).
-  - Ports cleanly to Windows.
-  - Runner-up: PySide6/QML, which costs about 0.3–0.8 GB of extra Flatpak runtime and still needs SDL for gamepad input (S28).
-- **Packaging:**
-  - Linux: a self-hosted Flatpak bundle on the freedesktop runtime, with `--share=network`, `--device=input` (plus a fallback for older Flatpak), and `--socket=x11`.
-  - Windows (later): PyInstaller in onedir mode, plus a firewall allow-rule set at install time (S28).
+**Install-type decision for the QNAP** (made in A0 from facts about the NAS):
 
-**Engineering items Path B must build that HA already has**
-- Subscription watchdog and resubscribe on Deck resume.
-- A discovery fallback chain: SSDP, then mDNS, then cached IPs, then a subnet scan, then manual IP.
-- Detection of UPnP being off.
+| Condition | Choice | Why |
+|---|---|---|
+| x86-64 CPU, Virtualization Station available, 8 GB or more RAM in the NAS | **Home Assistant OS VM.** Recommended. | Full add-on store, the simplest upgrades, and the same setup as a future dedicated box. A backup restores directly there (S26). |
+| ARM CPU, or tight on RAM | **Container Station** with `network_mode: host` | Lighter. No add-on store, so HACS and optional add-ons run as separate containers (S33, S34). |
+
+**Sizing**
+- Your rule is to size for 85% capacity. HA plus a few integrations normally uses about 1–2 GB of RAM.
+- A **4 GB, 2 vCPU, 32 GB** VM keeps expected load well under 85%.
+- HA documents 2 GB of RAM and 2 vCPUs as the VM minimum (S35).
+- The KVM image is a `.qcow2` that needs UEFI firmware without Secure Boot, attached to a bridged network (S35).
+- 32 GB is the image's default disk size.
+
+### Path B — standalone desktop app (phase 2)
+
+```
+ ┌──────────────── SonosDeck app (Python 3.12, Flatpak) ───────────────┐
+ │ ui/      PySide6 (Qt Widgets): main window, mini-player, tray icon  │
+ │ desktop/ MPRIS2 D-Bus service → KDE media widget + media keys       │
+ │ core/    SoCo 0.32 run in a worker pool; state store                │
+ │          discovery chain • topology • event manager + watchdog      │
+ │          resume handler • UPnP-off (403) detector                   │
+ │ extras/  sonos-websocket (announcements, optional)                  │
+ └──────────────────────────────────────────────────────────────────────┘
+```
+
+**What changed from v1**
+- **Toolkit is now PySide6 (Qt Widgets), not pygame-ce.**
+  - Without Game Mode, pygame-ce's advantages no longer apply: gamepad support and Steam's on-screen keyboard.
+  - Qt Widgets gives a native KDE look, resizable multi-monitor windows, a tray icon and an excellent Windows port.
+  - Cost: the shared Flathub KDE runtime with PySide6 (`io.qt.PySide.BaseApp`, about 0.3 GB download; S28). It is shared with other KDE and Qt apps.
+- **MPRIS2 support is new.** It plugs Sonos into KDE's media widget, the lock screen and your keyboard's media keys. Path A cannot do this.
+
+**Decision gate at B0: standalone, or a client of Home Assistant?**
+- **Recommendation: standalone (SoCo direct).** Not depending on the NAS is the main reason to build an app once HA exists.
+- An HA client would be simpler, but it would duplicate what the dashboard already does.
+
+**Path B builds what HA already has**
+- Subscription watchdog, and resubscribe after resume.
+- Discovery chain: SSDP → mDNS → cached IPs → subnet scan → manual IP.
+- 403 detection when UPnP is off.
 - Favorites playback logic.
-- Polling when the firewall blocks inbound events.
-- Paging of Browse results, which are capped at 1000 items per call.
+- Polling fallback when the firewall blocks events.
+- Browse paging (at most 1,000 items per call).
 
 ---
 
-## 4. UX design (both paths)
+## 4. UX design (desktop)
 
-- **Screen:** target 1280×800 at 16:10. Large touch targets of at least 48 px. Body text 16 px or larger. Dark theme. Flat shapes plus album art; no animation beyond simple transitions.
-- **Screens:**
-  - **Now Playing:** album art, transport, group volume and per-room volume.
-  - **Rooms:** group and ungroup, per-room volume and mute, preset groups.
-  - **Queue:** play, remove, reorder, clear, save.
-  - **Browse:** Favorites, Sonos Playlists, Library, Search and Share-link.
-  - **Settings per room:** EQ, home theater, alarms, sleep timer, status light, touch lock, battery.
-- **Gamepad map (Path B native; Path A through a Steam Input layout):**
-
-  | Input | Action |
-  |---|---|
-  | D-pad / left stick | Move focus |
-  | A | Select |
-  | B | Back |
-  | X | Play/pause |
-  | Y | Context menu |
-  | L1 / R1 | Previous / next screen |
-  | L2 / R2 | Volume down / up |
-  | View | Rooms |
-  | Menu | Settings |
-
-- **Decky Quick Access Menu mini-player (phase 4, optional):**
-  - Now-playing line, play/pause/skip, group volume and per-room sliders, room picker, favorites list.
-  - It works over any game without switching windows.
+- **Main window ("SonosDeck")**
+  - Three columns: **Rooms and grouping** | **Now Playing** | **Queue and Browse**.
+  - Scales from 1280 px to 4K widths.
+  - Settings view per room: EQ, home theater, alarms, sleep timer, status light, touch lock, battery.
+- **Pop-out mini-player ("SonosDeck Mini")**
+  - A small separate window with now playing, transport controls, group volume and per-room volume.
+  - A KDE window rule keeps it on top and places it on whichever monitor you choose.
+- **Look:** dark theme, flat shapes plus album art, no animation beyond simple transitions.
+- **Input:** keyboard and mouse.
+  - Path A uses browser defaults.
+  - Path B adds shortcuts (Space for play/pause, Ctrl+↑/↓ for volume, Ctrl+1–3 for columns) and media keys through MPRIS.
 
 ---
 
 ## 5. Feature coverage matrix
 
-Key: Y = yes · P = partial · N = no · ? = verify during build · OOS = out of scope.
+Key: Y = yes · P = partial · N = no · ? = verify during the build · OOS = out of scope.
 
-| Feature | Official app | Path A (HA + Sonos Card + MA + sonos_extras) | Path B (standalone) |
+| Feature | Official app | Path A (HA + Sonos Card + sonos_extras) | Path B (standalone) |
 |---|---|---|---|
 | List rooms; group, ungroup, preset groups | Y | Y | Y |
 | Group volume, per-room volume, mute | Y | Y | Y |
@@ -196,7 +206,10 @@ Key: Y = yes · P = partial · N = no · ? = verify during build · OOS = out of
 | Sonos Playlists: create, edit | Y | sonos_extras | Y |
 | Local music library: browse, search | Y | Y (media browser, `search_media`) | Y |
 | Local music library: reindex | Y | sonos_extras | Y |
-| Music-service search and browse | Y | P (Music Assistant's own accounts; share links) | P (share links; optional Spotify Web API) |
+| Spotify: browse your library and playlists | Y | P (HA Spotify integration, test in A2) | P (Spotify Web API, optional) |
+| Spotify: search | Y | P (Spotify app via Connect; Music Assistant if eligible) | P (Spotify app via Connect) |
+| Spotify: play a link or URI natively | (share sheet) | Y | Y |
+| YouTube Music | Y | P (Sonos Favorites) | P (Sonos Favorites) |
 | Line-in and TV input | Y | Y | Y |
 | Alarms: enable, disable, edit | Y | Y (switches, `update_alarm`) | Y |
 | Alarms: create, delete | Y | sonos_extras | Y |
@@ -207,47 +220,50 @@ Key: Y = yes · P = partial · N = no · ? = verify during build · OOS = out of
 | Sub on, gain, crossover; surround levels; full/ambient | Y | Y | Y |
 | Lip sync (audio delay), TV Autoplay | Y | Y (Autoplay is polled) | Y |
 | Status light, touch controls | Y | Y | Y |
-| Battery level, power state (Roam/Move) | Y | Y | Y (S2) |
+| Battery level and power state (Roam, Move) | Y | Y | Y (S2) |
 | Rename room | Y | sonos_extras | Y |
 | Volume limit | Y | ? | ? |
 | Software update: check | Y | sonos_extras (check only) | Y (check only) |
 | Announcements / TTS | (Voice only) | Y (port 1443) | P (optional) |
+| KDE media widget, lock screen, media keys | N | N | Y (MPRIS2) |
 | Remote control away from home | Y | Y (HA remote access) | N (LAN only) |
 | Automations | Partial (alarms) | Y | N |
-| Stereo pair, surround, sub bonding | Y | OOS | OOS (Sonos restricts this to user-initiated setup) |
-| Trueplay tuning | Y (iOS mic / Quick Tuning) | OOS (on/off only) | OOS (on/off only) |
+| Stereo pair, surround and sub bonding | Y | OOS | OOS (Sonos restricts this to user-initiated setup) |
+| Trueplay tuning | Y (iOS mic or Quick Tuning) | OOS (on/off only) | OOS (on/off only) |
 | Setup, Wi-Fi, SonosNet, voice assistants, AirPlay, account | Y | OOS | OOS |
-
-**Bottom line:** both paths reach roughly the same parity ceiling. Everything marked OOS stays in the official app regardless of path. Path A reaches that ceiling with far less custom code.
 
 ---
 
 ## 6. Phased delivery
 
-Each phase ends with an acceptance check you run on the Deck.
+Each phase ends with an acceptance check run on the Deck in Desktop Mode.
 
-### Path A (recommended)
+**Every NAS-side step needs a session that can reach the LAN.** That means either:
+- a local Claude Code session on a computer on the LAN, or
+- this cloud session attached through Remote Control to a Linux or Mac folder. The Deck itself qualifies.
 
-| Phase | Deliverable | Acceptance |
-|---|---|---|
-| **A0 Prereqs** | Install-type decision (HA OS VM preferred; Container acceptable); DHCP reservations for the speakers and the Deck; check UPnP in Connection Security | Speakers reachable from the NAS on 1400 and 1443 |
-| **A1 Core** | HA on the NAS (host networking if Container); Sonos integration; Music Assistant; HACS; encrypted backups with the key stored offline | Every room appears; entities from §5 are present; a backup restore is tested |
-| **A2 Dashboard** | `SonosDeck/ha/dashboard.yaml` (versioned) with views for Now Playing (panel), Rooms, Queue, Browse and Settings; kiosk-mode; tuned for 1280×800 | Every screen in §4 is usable by touch on the Deck |
-| **A3 Deck and Windows launchers** | Launcher script for a browser app window, added to Steam; recommended Steam Input layout; Windows Edge `--app` shortcut | Launches from Game Mode in under 5 s with no browser chrome |
-| **A4 sonos_extras** | Small HA custom integration (Python, uses HA's SoCo) adding the actions HA lacks (§5); dashboard buttons wired to it | Every "sonos_extras" row in §5 works |
-| **A5 Decky mini-player (optional)** | QAM plugin talking to the HA WebSocket API with a long-lived token; self-distributed zip | Play/pause, volume and room switch work in-game |
-
-### Path B (if Path A is rejected)
+### Path A — Home Assistant (now)
 
 | Phase | Deliverable | Acceptance |
 |---|---|---|
-| **B0 Risk spikes** | Flatpak bundle skeleton; SDL controller in Game Mode; Steam on-screen keyboard through `steam://open/keyboard` from inside Flatpak (unverified, S28); SSDP and event callbacks inside the Flatpak sandbox; SteamOS firewall state | All four spikes pass on the device, or a documented workaround exists |
-| **B1 Core** | Discovery chain, topology/state store, event manager with watchdog, resume handler, 403 detection, tests against recorded SOAP fixtures | Unit tests pass; live state stays accurate across a sleep/resume |
-| **B2 Play** | Now Playing, Rooms/grouping, volume | §5 rows: rooms/grouping → shuffle/repeat/crossfade |
-| **B3 Content** | Queue, Favorites, Playlists, Library, share links, optional Spotify search | §5 rows: queue → line-in/TV |
-| **B4 Settings** | EQ, home theater, alarms, sleep timer, light, lock, battery, rename, update check | §5 rows: alarms → software update check |
-| **B5 Decky (optional)** | QAM plugin reusing core/; self-distributed. `lxml` must match Decky's frozen Python ABI (S28) | Works in-game |
-| **B6 Windows** | PyInstaller onedir build and installer firewall rule | Discovery and events work on Windows |
+| **A0 Access and inventory** | A LAN-capable session reads the QNAP docs (PROJECT.md). Then it records: QNAP model, CPU architecture, RAM, free disk, QTS version, Container Station and Virtualization Station availability. Discover speakers (names, models, S1/S2, firmware, IPs); check UPnP is on (a SOAP call must not return 403); add DHCP reservations. Choose the install type (§3). | PROJECT.md environment table filled in; install type chosen |
+| **A1 HA core** | Install HA per `ha/README.md`. Add the Sonos integration and HACS. Set up encrypted backups and store the key offline. Fill in `ha/VERSIONS.md`. | Every room appears; the entities in §5 are present; a backup restore has been tested |
+| **A2 Spotify routes** | Test routes 1–6 from §2.3, in order. Keep what works; record the results in `ha/README.md`. | Favorites, share links and at least one way to browse inside the dashboard work |
+| **A3 Dashboard** | Import `ha/dashboards/sonosdeck.yaml`: main view (three columns), mini view and settings view. Install kiosk-mode, the Sonos Card and auto-entities. | Every §4 screen works with the mouse at the monitors' resolution |
+| **A4 Launchers** | `launchers/deck/` (KDE app windows plus window rules) and `launchers/windows/` (Edge `--app`) | The main and mini windows open from the KDE launcher with no browser chrome, on the chosen monitors |
+| **A5 sonos_extras** | A small HA custom integration (Python, using HA's own SoCo), only for gaps A1–A3 confirm: save queue, create/delete alarms, edit playlists and favorites, rename rooms, reindex, update check. Dashboard buttons wired to it. | Every "sonos_extras" row in §5 works |
+
+### Path B — standalone app (after Path A is in use)
+
+| Phase | Deliverable | Acceptance |
+|---|---|---|
+| **B0 Decision gate and spikes** | Confirm standalone versus HA client (§3). Flatpak bundle skeleton; SSDP and event callbacks inside the Flatpak sandbox; MPRIS2 visible to KDE; SteamOS firewall state. | All spikes pass on the Deck, or there is a documented workaround |
+| **B1 Core** | Discovery chain, topology and state store, event manager with watchdog, resume handler, 403 detection, recorded-fixture tests | Tests pass; the state stays accurate across sleep and resume |
+| **B2 Windows and play** | Main window, mini-player, tray; Now Playing, rooms and grouping, volume | §5 rows from rooms/grouping through shuffle/repeat/crossfade |
+| **B3 Content** | Queue, favorites, playlists, library, share links, optional Spotify Web API | §5 rows from queue through YouTube Music |
+| **B4 Settings** | EQ, home theater, alarms, sleep timer, light, lock, battery, rename, update check | §5 rows from alarms through software update |
+| **B5 Desktop integration** | MPRIS2, media keys, autostart option | Playback is controllable from the KDE media widget and keyboard keys |
+| **B6 Windows** | PyInstaller onedir build and installer firewall rule; System Media Transport Controls (SMTC, the Windows equivalent of MPRIS) as a stretch goal | Discovery and events work on Windows |
 
 ---
 
@@ -255,114 +271,78 @@ Each phase ends with an acceptance check you run on the Deck.
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Sonos turns off or removes UPnP on port 1400 | Both paths lose most features | Detect 403 and show the fix; HA tracks upstream changes; the port-1443 WebSocket covers basics |
-| No sanctioned music-service browsing | Search is weaker than the official app | Favorites/playlists, share links, Music Assistant, Spotify Web API (§2.3) |
-| HACS card breakage (A) | Dashboard regressions | Pin versions; YAML in git; update deliberately |
-| NAS downtime (A) | No control from the Deck | Official app or play.sonos.com as fallback |
-| Store AI policies (Decky, Flathub) | No store listing | Self-distribute zip and `.flatpak` bundle (§2.5) |
-| Steam on-screen keyboard from Flatpak (B) | Search typing in Game Mode | B0 spike; in-app keyboard fallback |
-| Firewall blocks events (SteamOS state unverified; Windows prompts) | Stale UI | Polling fallback; Windows installer rule |
-| Sleep/resume and IP change | Lost subscriptions | Resume detection, then rediscover and resubscribe |
+| Sonos turns off or removes UPnP on port 1400 | Both paths lose most features | Detect 403 and show the fix. HA tracks upstream changes. The port-1443 WebSocket still covers basic control. |
+| No sanctioned way to browse music services | Weaker in-app Spotify search | The layered strategy in §2.3, with the Spotify app plus Connect as the primary search |
+| Spotify API restrictions (2026); librespot failing on newer accounts | The HA Spotify integration or Music Assistant may be limited | Test in A2; keep routes 1–3, which need no Spotify developer app |
+| QNAP resources or architecture | Can't run an HA OS VM | Fall back to Container Station (§3) |
+| QNAP networking: Virtual Switch in NAT mode, QuFirewall | Discovery fails or events don't arrive | Bridged virtual switch for the VM, or host network for the container. Allow TCP 1400–1499 inbound from the LAN. HA falls back to polling. |
+| HACS card breakage (A) | The dashboard regresses after HA updates | Pin versions, keep the YAML in git, update deliberately |
+| NAS downtime (A) | No control through HA | Path B app (later), the official app, or play.sonos.com |
+| Network segmented later (VLANs) | SSDP and mDNS no longer cross subnets | mDNS/SSDP reflector, or HA `hosts:` with static speaker IPs; Path B gets manual IPs and subnet scan |
+| Sleep, resume and IP change (B) | Subscriptions are lost | Detect resume, then rediscover and resubscribe |
 | Sonos trademark in the name | Takedown or rejection | Distinct public name (§8) |
 
 ---
 
 ## 8. Naming
 
-"SonosDeck" is a working name for this private repo only. A public build must not imply affiliation with Sonos in its name or icon (S25). Pick the final name before any release.
+"SonosDeck" is a working name for this private repo only. A public build must not imply affiliation with Sonos in its name or icon (S25).
 
 ---
 
-## 9. Draft project setup file (requires approval)
+## 9. Project setup file
 
-No project setup file exists in this repo. Proposed `SonosDeck/PROJECT.md`:
-
-```markdown
-# SonosDeck — Project Setup
-
-## Purpose
-Unofficial Sonos controller for Steam Deck (Desktop + Game Mode); Windows later.
-
-## Architecture (per accepted PLAN.md path)
-- Path A: Home Assistant on NAS + Sonos integration + Music Assistant + HACS
-  (Sonos Card, kiosk-mode) + `sonos_extras` custom integration + Deck launcher.
-- Path B: Python 3.12 + SoCo 0.32 core + pygame-ce UI, Flatpak bundle.
-
-## Environment
-- Sonos system: <S1|S2>, rooms/models: <list>
-- Network: <subnet/VLAN>, speaker IPs reserved: <yes/no>
-- NAS: <model/OS>, HA install type: <HAOS VM|Container>, HA URL: <url>
-- Deck: SteamOS <version>, LCD/OLED
-
-## Conventions
-- All config (dashboard YAML, integration code) lives in `SonosDeck/`.
-- Pin versions of HA custom cards/integrations; record in `SonosDeck/VERSIONS.md`.
-- No secrets in git (HA tokens, Spotify client secrets go in local files listed in .gitignore).
-- Distribution: self-hosted only (Decky/Flathub AI policies). No "Sonos" in public name/icon.
-
-## Testing
-- Acceptance checks per phase run on the physical Deck in Game Mode and Desktop Mode.
-- Path B: unit tests against recorded SOAP fixtures; no live-speaker tests in CI.
-
-## References
-- PLAN.md §11 (sources)
-```
+Created and approved: [PROJECT.md](PROJECT.md).
 
 ---
 
-## 10. Open questions (answers determine the final path)
+## 10. Open items
 
-1. **NAS make, model and OS** (Synology, Unraid, TrueNAS, QNAP), and can it run VMs? This decides HA OS in a VM versus Container.
-2. **Is HA already running anywhere,** or is this a fresh install?
-3. **Game Mode input:** is touch and trackpad acceptable, or is full gamepad-only navigation required?
-4. **Sonos system:** S1 or S2? Which models: home theater, sub, portables? This affects the settings screens.
-5. **Music services used:** Spotify, Apple Music, others? This decides between Music Assistant and Spotify Web API search.
-6. **Network:** one subnet, or VLANs, mesh, UniFi? This affects discovery.
-7. **Approve** creating `SonosDeck/PROJECT.md` from §9?
-8. **Approve Path A, Path B, or a hybrid?**
+1. **LAN access** for A0 and later phases (§6): a local Claude Code session, or Remote Control from the Deck or another Linux or Mac machine.
+2. **Where the QNAP docs live** (`CLAUDE.md`, `.claude/QNAP_ACCESS.md`, `.claude/QNAP_CLAUDE.md`). A0 reads them before doing anything on the NAS.
+3. **QNAP model, CPU architecture and RAM.** A0 collects these if not provided.
+4. **Spotify Premium:** yes or no? Needed for the HA Spotify integration's playback control and for a Spotify developer app (S29, S31).
+5. **Speaker inventory and S1 vs S2.** A0 discovers this from the LAN.
 
 ---
 
 ## 11. Sources
 
 **Sonos official**
-- S1. Control API reference index — https://docs.sonos.com/llms.txt ; https://docs.sonos.com/docs/control
+- S1. Control API index — https://docs.sonos.com/llms.txt ; https://docs.sonos.com/docs/control
 - S2. Authorization and subscriptions — https://docs.sonos.com/docs/authorize ; https://docs.sonos.com/docs/subscribe
-- S3. Connected-home architecture ("not available for wide release") — https://docs.sonos.com/docs/connected-home-architecture
-- S4. SMAPI overview — https://docs.sonos.com/docs/smapi
-- S5. Connection Security settings — https://support.sonos.com/en-us/article/adjust-connection-security-settings
-- S6. Sonos community, player update thread (UPnP "no longer actively maintained") — https://en.community.sonos.com/product-updates/a-new-player-update-is-live-6930092
+- S3. Connected-home architecture — https://docs.sonos.com/docs/connected-home-architecture
+- S4. SMAPI — https://docs.sonos.com/docs/smapi
+- S5. Connection Security — https://support.sonos.com/en-us/article/adjust-connection-security-settings
+- S6. Sonos community: player update (UPnP "no longer actively maintained") — https://en.community.sonos.com/product-updates/a-new-player-update-is-live-6930092
 - S13. App release notes — https://support.sonos.com/en-us/article/release-notes-sonos-app-updates
-- S14. App roadmap update (2024) — https://www.sonos.com/en/blog/update-on-the-sonos-app
+- S14. 2024 app roadmap — https://www.sonos.com/en/blog/update-on-the-sonos-app
 - S15. Security advisory SSA-2025-0002 — https://www.sonos.com/security-advisory-2025-0002
-- S19. Web app — https://support.sonos.com/en-us/article/using-the-queue-in-the-sonos-app ; https://support.sonos.com/en/article/sonos-app-requirements
+- S19. App requirements and web app — https://support.sonos.com/en/article/sonos-app-requirements
 
 **Community and GitHub**
-- S7. Home Assistant 403 reports — https://github.com/home-assistant/core/issues/154877
+- S7. HA 403 reports — https://github.com/home-assistant/core/issues/154877
 - S8. svrooij Sonos UPnP docs — https://sonos.svrooij.io/services/
-- S9. Home Assistant Sonos integration — https://www.home-assistant.io/integrations/sonos/ ; https://github.com/home-assistant/core/blob/dev/homeassistant/components/sonos/manifest.json
+- S9. HA Sonos integration — https://www.home-assistant.io/integrations/sonos/ ; manifest: https://github.com/home-assistant/core/blob/dev/homeassistant/components/sonos/manifest.json
 - S10. aiosonos and sonos-websocket — https://pypi.org/project/aiosonos/ ; https://github.com/jjlawren/sonos-websocket
-- S11. SoCo music-services issue — https://github.com/SoCo/SoCo/issues/557
+- S11. SoCo music services — https://github.com/SoCo/SoCo/issues/557
 - S12. SoCo PR #1010 (blocked) — https://github.com/SoCo/SoCo/pull/1010
-- S16. SoCo — https://pypi.org/project/soco/ ; https://github.com/SoCo/SoCo/releases/tag/v0.32.0 ; https://soco.readthedocs.io/en/latest/api/soco.plugins.html
-- S17. Music Assistant Sonos support — https://www.music-assistant.io/player-support/sonos/ ; https://community.home-assistant.io/t/music-assistant-2-0-your-music-your-players/727626?page=66
+- S16. SoCo — https://pypi.org/project/soco/ ; https://github.com/SoCo/SoCo/releases/tag/v0.32.0
+- S17. Music Assistant: Sonos — https://www.music-assistant.io/player-support/sonos/ ; Spotify provider — https://music-assistant.io/music-providers/spotify
 - S18. noson on Flathub — https://flathub.org/apps/io.github.janbar.noson
-- S20. Decky plugin store — https://plugins.deckbrew.xyz/plugins ; https://github.com/martinpl/MusicControl
-- S21. HA Deck — https://community.home-assistant.io/t/ha-deck-control-home-assistant-from-steam-deck-quick-access-menu/999857
-- S22. Home Assistant Sonos internals — https://github.com/home-assistant/core/blob/dev/homeassistant/components/sonos/speaker.py
+- S22. HA Sonos internals — https://github.com/home-assistant/core/blob/dev/homeassistant/components/sonos/speaker.py
 - S23. Sonos Card — https://github.com/punxaphil/custom-sonos-card ; https://community.home-assistant.io/t/dashboard-sonos-card/393620
-- S27. kiosk-mode — https://github.com/NemesisRE/kiosk-mode ; browser_mod thread — https://community.home-assistant.io/t/browser-mod-turn-your-browser-into-a-controllable-device-and-a-media-player/123806?page=131
+- S27. kiosk-mode — https://github.com/NemesisRE/kiosk-mode
+- S30. HA Sonos Spotify handling — https://github.com/home-assistant/core/blob/dev/homeassistant/components/sonos/media_browser.py ; https://github.com/home-assistant/core/blob/dev/homeassistant/components/sonos/media_player.py
+- S31. HA Spotify integration — https://www.home-assistant.io/integrations/spotify/ ; Spotify community, home-automation thread — https://community.spotify.com/t5/Spotify-for-Developers/Spotify-in-Home-Automation/m-p/7000973/highlight/true
+- S32. SpotifyPlus — https://community.home-assistant.io/t/spotifyplus-integration/698651 ; https://newreleases.io/project/github/thlucas1/homeassistantcomponent_spotifyplus/release/v1.0.41
+- S33. QNAP: Container Station vs Virtualization Station — https://community.home-assistant.io/t/qnap-container-station-or-virtualization-station-install/509179 ; https://community.home-assistant.io/t/home-assistant-os-install-on-qnap-nas/523656
 
 **Platform**
-- S24. Decky plugin submission template — https://github.com/SteamDeckHomebrew/decky-plugin-database (.github/PULL_REQUEST_TEMPLATE/plugin_addition.md)
-- S25. Flathub requirements (AI and trademark rules) — https://docs.flathub.org/docs/for-app-authors/requirements
-- S26. HA 2025.1 backup restore on all install types — https://home-assistant.io/blog/2025/01/03/release-20251/
-- S28. Steam Deck and toolkit references:
-  - SDL Steam on-screen keyboard — https://github.com/libsdl-org/SDL
-  - Flatpak permissions — https://docs.flatpak.org/en/latest/sandbox-permissions.html
-  - Steam Deck recommendations — https://partner.steamgames.com/doc/steamdeck/recommendations
-  - Decky template — https://github.com/SteamDeckHomebrew/decky-plugin-template
-  - Decky loader — https://github.com/SteamDeckHomebrew/decky-loader
-  - pygame-ce controller — https://pyga.me/docs/ref/sdl2_controller.html
-  - Flathub runtime sizes — https://flathub.org/api/v2/summary/org.freedesktop.Platform
-  - Windows Firewall rules — https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/rules
+- S24. Decky submission template — https://github.com/SteamDeckHomebrew/decky-plugin-database (.github/PULL_REQUEST_TEMPLATE/plugin_addition.md)
+- S25. Flathub requirements — https://docs.flathub.org/docs/for-app-authors/requirements
+- S26. HA 2025.1 backup restore — https://home-assistant.io/blog/2025/01/03/release-20251/
+- S28. Toolkit references — Flathub runtime sizes: https://flathub.org/api/v2/summary/io.qt.PySide.BaseApp ; Flatpak permissions: https://docs.flatpak.org/en/latest/sandbox-permissions.html ; Windows Firewall: https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/rules
+- S29. Spotify Developer Mode changes (2026) — https://techcrunch.com/2026/02/06/spotify-changes-developer-mode-api-to-require-premium-accounts-limits-test-users/ ; https://www.techzine.eu/news/devops/138608/spotify-puts-the-brakes-on-developer-mode-with-stricter-api-rules/
+- S34. HA Container install (compose) — https://www.home-assistant.io/installation/linux
+- S35. HA VM requirements (2 GB RAM, 2 vCPU, UEFI, bridged network) — https://www.home-assistant.io/installation/linux

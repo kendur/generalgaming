@@ -1,0 +1,116 @@
+# SonosDeck dashboard (PLAN §4, phase A3)
+#
+# Import:
+#   1. Settings > Dashboards > Add dashboard > "New dashboard from scratch".
+#   2. Title "SonosDeck", URL "sonos-deck".
+#   3. Open it > Edit > ⋮ > Raw configuration editor > paste this file.
+#
+# Views (open as app windows with the launchers in ../../launchers/):
+#   /sonos-deck/main      three columns: rooms and grouping | now playing | queue and browse
+#   /sonos-deck/mini      pop-out mini-player
+#   /sonos-deck/settings  speaker, home-theater and alarm settings
+#
+# Requires these HACS frontend components (pin them in ../VERSIONS.md):
+#   Sonos Card     custom:sonos-card      https://github.com/punxaphil/custom-sonos-card
+#   kiosk-mode                            https://github.com/NemesisRE/kiosk-mode
+#   auto-entities  custom:auto-entities   https://github.com/thomasloven/lovelace-auto-entities
+#
+# Nothing here names a specific entity:
+#   - The Sonos Card finds Sonos players automatically.
+#   - The settings cards select entities with integration filters.
+#   - The three Sonos Card instances on the main view share the selected player through the URL hash.
+#
+# kiosk_mode only affects this dashboard. Other dashboards keep HA's header and sidebar, so use them for admin work.
+
+kiosk_mode:
+  hide_header: true
+  hide_sidebar: true
+
+title: SonosDeck
+views:
+  - title: Main
+    path: main
+    type: panel
+    cards:
+      - type: horizontal-stack
+        cards:
+          - type: custom:sonos-card
+            sections:
+              - groups
+              - grouping
+              - volumes
+            startSection: groups
+          - type: custom:sonos-card
+            sections:
+              - player
+            player:
+              showVolumeUpAndDownButtons: true
+              showSource: true
+          - type: custom:sonos-card
+            sections:
+              - queue
+              - media browser
+              # - search   # Enable only if Music Assistant is set up (PLAN §2.3, route 6).
+            startSection: queue
+
+  - title: Mini
+    path: mini
+    type: panel
+    cards:
+      - type: custom:sonos-card
+        sections:
+          - player
+          - volumes
+          - groups
+        player:
+          showVolumeUpAndDownButtons: true
+          controlsLargeIcons: true
+        groups:
+          compact: true
+        footerHeight: 3.5
+
+  - title: Settings
+    path: settings
+    type: masonry
+    cards:
+      - type: custom:auto-entities
+        card:
+          type: entities
+          title: Speaker and home-theater settings
+          state_color: true
+        filter:
+          include:
+            - integration: sonos
+              domain: switch
+            - integration: sonos
+              domain: number
+            - integration: sonos
+              domain: select
+          exclude:
+            - name: "*Alarm*"
+        sort:
+          method: name
+      - type: custom:auto-entities
+        card:
+          type: entities
+          title: Alarms
+          state_color: true
+        filter:
+          include:
+            - integration: sonos
+              domain: switch
+              name: "*Alarm*"
+        sort:
+          method: name
+      - type: custom:auto-entities
+        card:
+          type: entities
+          title: Status
+        filter:
+          include:
+            - integration: sonos
+              domain: sensor
+            - integration: sonos
+              domain: binary_sensor
+        sort:
+          method: name

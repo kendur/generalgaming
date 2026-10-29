@@ -11,4 +11,4 @@ mods, playground, etc
 
 ## Tools
 
-- [SonosDeck](./SonosDeck/) - unofficial Sonos controller for Steam Deck (plan stage; see [PLAN.md](./SonosDeck/PLAN.md))
+- [SonosDeck](./SonosDeck/) - unofficial Sonos controller for Steam Deck (Home Assistant phase; see [PROJECT.md](./SonosDeck/PROJECT.md) and [PLAN.md](./SonosDeck/PLAN.md))
